@@ -3,6 +3,22 @@ const expect = std.testing.expect;
 
 const MaxUsers = 16;
 
+pub fn log_command(cmd: Command) void {
+    var buf: [128]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buf);
+    var string = cmd_to_string(cmd, &fba.allocator) catch unreachable;
+    defer string.deinit();
+    std.log.info("{s}", .{string.items});
+}
+pub fn read_command(str: []const u8) ?Command {
+    var buf: [128]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buf);
+    var string = std.ArrayList(u8).init(&fba.allocator);
+
+    std.json.stringify(.{ .ty = @tagName(cmd), .cmd = cmd }, .{}, string.writer()) catch unreachable;
+    std.log.info("{s}", .{string.items});
+}
+
 pub fn main() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
@@ -59,9 +75,8 @@ pub fn main() anyerror!void {
         defer output.deinit();
         std.log.info("All assigned:\n{s}", .{output.items});
     }
-    //TODO: view points
     //TODO: create a log reader/writer for commands
-    //TODO: Generate actual html
+    //TODO: Generate actual html (include points display)
     //TODO: include zhp or something (eventually do our own!)
 }
 
@@ -180,6 +195,7 @@ pub const State = struct {
     }
 
     pub fn apply_cmd(self: *State, cmd: Command) !void {
+        log_command(cmd);
         try switch (cmd) {
             .AddUser => |name| self.users.append(.{ .name = name, .id = @intCast(u8, self.users.items.len) }),
             .AddSlot => |name| {
@@ -250,9 +266,12 @@ pub const State = struct {
                     user.*.score -= (1 / @intToFloat(f32, num_users));
                 }
             },
-            else => {},
+            .UnassignSlot => |info| {
+                // TODO
+            },
         };
     }
+
     fn popCount(slice: anytype) usize {
         var x: usize = 0;
         for (slice) |b| {
@@ -274,6 +293,7 @@ pub const State = struct {
             return null;
         }
     }
+
     fn show_slot_idx(slot: Slot, idx: usize) u8 {
         const ass: bool = slot.assignedUsers[idx];
         const want: bool = slot.wantUsers[idx];
@@ -287,3 +307,37 @@ pub const State = struct {
         return ' ';
     }
 };
+
+pub fn cmd_to_string(cmd: Command, allocator: *std.mem.Allocator) !std.ArrayList(u8) {
+    var string = std.ArrayList(u8).init(allocator);
+    errdefer string.deinit();
+
+    switch (cmd) {
+        .AddUser => |name| try string.writer().print("AddUser:{s}", .{name}),
+        .AddSlot => |name| try string.writer().print("AddSlot:{s}", .{name}),
+        .RemoveSlot => |name| try string.writer().print("RemoveSlot:{s}", .{name}),
+        .UserWants => |want| try string.writer().print("UserWants:{s}:{s}", .{ want.user, want.slot }),
+        .UserNeutral => |neut| try string.writer().print("UserNeutral:{s}:{s}", .{ neut.user, neut.slot }),
+        .UserHates => |hate| try string.writer().print("UserHates:{s}:{s}", .{ hate.user, hate.slot }),
+        .AssignSlot => |info| try string.writer().print("AssignSlot:{s}", .{info.slot}),
+        .UnassignSlot => |info| try string.writer().print("UnassignSlot:{s}", .{info.slot}),
+    }
+    return string;
+}
+
+pub fn read_cmd(std.ArrayList(u8), allocator: *std.mem.Allocator) !?Command {
+    var string = std.ArrayList(u8).init(allocator);
+    errdefer string.deinit();
+
+    switch (cmd) {
+        .AddUser => |name| try string.writer().print("AddUser:{s}", .{name}),
+        .AddSlot => |name| try string.writer().print("AddSlot:{s}", .{name}),
+        .RemoveSlot => |name| try string.writer().print("RemoveSlot:{s}", .{name}),
+        .UserWants => |want| try string.writer().print("UserWants:{s}:{s}", .{ want.user, want.slot }),
+        .UserNeutral => |neut| try string.writer().print("UserNeutral:{s}:{s}", .{ neut.user, neut.slot }),
+        .UserHates => |hate| try string.writer().print("UserHates:{s}:{s}", .{ hate.user, hate.slot }),
+        .AssignSlot => |info| try string.writer().print("AssignSlot:{s}", .{info.slot}),
+        .UnassignSlot => |info| try string.writer().print("UnassignSlot:{s}", .{info.slot}),
+    }
+    return string;
+}
